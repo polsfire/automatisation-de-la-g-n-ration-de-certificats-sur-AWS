@@ -1,0 +1,104 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Resources": {
+        "SecretCreationFunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": "SecretCreationPolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "secretsmanager:CreateSecret",
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "SecretCreationFunction": {
+            "Type": "AWS::Lambda::Function",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+                "Code": {
+                    "ZipFile": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "import boto3",
+                                "import cfnresponse",
+                                "",
+                                "def handler(event, context):",
+                                "    try:",
+                                "        print('Event:', event)",
+                                "        region = event['ResourceProperties']['Region']",
+                                "        secrets_manager = boto3.client('secretsmanager', region_name=region)",
+                                "        secret_name = event['ResourceProperties']['SecretName']",
+                                "        secret_value = event['ResourceProperties']['SecretValue']",
+                                "        create_secret_params = {",
+                                "            'Name': secret_name,",
+                                "            'SecretString': secret_value",
+                                "        }",
+                                "        print('Creating secret:', create_secret_params)",
+                                "        secrets_manager.create_secret(**create_secret_params)",
+                                "        print('Secret created successfully')",
+                                "        response_data = {}  # Data to send back to CloudFormation upon success",
+                                "        cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)",
+                                "    except Exception as error:",
+                                "        print('Error creating secret:', error)",
+                                "        # Log additional error information",
+                                "        print('Error message:', str(error))",
+                                "        # Send a custom response to CloudFormation with detailed error information",
+                                "        response_data = {",
+                                "            'Error': str(error)",
+                                "        }",
+                                "        cfnresponse.send(event, context, cfnresponse.FAILED, response_data)"
+                            ]
+                        ]
+                    }
+                },
+                "Handler": "index.handler",
+                "Runtime": "python3.9",
+                "Timeout": 30,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "SecretCreationFunctionRole",
+                        "Arn"
+                    ]
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "SecretCreationFunctionArn": {
+            "Value": {
+                "Fn::GetAtt": [
+                    "SecretCreationFunction",
+                    "Arn"
+                ]
+            }
+        }
+    }
+}
